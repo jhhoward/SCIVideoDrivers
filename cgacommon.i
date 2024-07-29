@@ -64,6 +64,7 @@ cursor_lock     dw      0
 convert_palette		times 256 dw 0				
 	
 framebuffer_segment_cache	dw	0
+need_fullscreen_refresh		db  0
 
 	
 ;-------------- dispatch -----------------------------------------------
@@ -141,13 +142,15 @@ restore_mode:
 ;               the rectangle and has to lock it, otherwise.
 ;-----------------------------------------------------------------------
 update_rect:
-		mov		[framebuffer_segment_cache], si
+		mov		word [framebuffer_segment_cache], si
 
+		; round X values to the nearest multiple of 4
         shr     bx,1
         shr     bx,1
         add     dx,3
         shr     dx,1
         shr     dx,1
+		
         ; load and convert cursor x
         mov     bp,[cursor_x]
         shr     bp,1
@@ -194,20 +197,37 @@ update_rect:
         mov     es,bp
         push    ds
         mov     ds,si
-
+		
+		; Check if we need a full screen refresh
+		mov		bp, [cs:need_fullscreen_refresh]
+		test	bp, 1
+		jz		.partial_screen_refresh
+		
+		; Need a full screen refresh due to palette change
+		xor		di,di
+		xor		si,si
+		mov		bp,050h
+		mov		dx,200
+		mov		byte [cs:need_fullscreen_refresh], 0
+		mov     bx,convert_palette
+		jmp		.y_loop
+		
+.partial_screen_refresh
         ; calculate source address
-        sub     cx,ax			; calculate height
-        sub     dx,bx			; calculate width
-        mov     bp,ax			; store top position in bp
+        sub     cx,ax			; cx = y2 - y1
+        sub     dx,bx			; dx = x2 - x1
+        mov     bp,ax			; bp = y1
         mov     ax,320
-        mul     bp
-        add     ax,bx
-		add     ax,bx
-		add     ax,bx
-		add     ax,bx
+		push	dx
+        mul     bp				; y1 * 320 (stored in dx:ax)
+        add     ax,bx			; + x1 (need to add four times because x coordinates are divided by 4)
+        add     ax,bx			; 
+        add     ax,bx			; 
+        add     ax,bx			; 
         mov     si,ax
+		pop		dx
         ; calculate destination address
-        mov     ax,bp
+        mov     ax,bp			; ax = y1
         xor     di,di
         shr     ax,1
         rcr     di,1
@@ -219,25 +239,22 @@ update_rect:
         add     di,bx
 
 		mov     bx,convert_palette
+		test	bp, 1
+		jz		.is_even_start_line
+		add		bx, 256			; starting on an odd line needs to use the second half of the LUT
+.is_even_start_line:
 		
-        mov     dh,dl
-        mov     dl,4
         mov     bp,dx
         mov     dx,cx
-		
-		
-		;; hack to just redraw the whole screen
-		xor		di,di
-		xor		si,si
-		mov		bp,05000h
-		mov		dx,200
-		;;
-		mov 	cl, 0
-		
+
+; bx = palette LUT pointer
+; dx = number of lines to process
+; es:di = VRAM write pointer
+; ds:si = framebuffer read pointer
+; bp = number of pixels in line / 4
+
 .y_loop:
-		mov ah, cl
         mov     cx,bp
-		mov cl, ah
 		
         push    si
         push    di
@@ -271,24 +288,20 @@ update_rect:
         ; write to the screen's VRAM
         stosb
 		
-        dec     ch
+        dec     cx
         jnz    .x_loop
 
         pop     di
         pop     si
         add     si,320
 		
-		;mov 	cl, 4
-		
         ; handle scanline interleaving
-		add		bx, 256
+		add		bx, 256				; shift to the second part of the palette LUT
         add     di,8192
         cmp     di,16384
         jb      .odd
         sub     di,16304
-		sub		bx, 512
-		
-		;mov 	cl, 0
+		sub		bx, 512				; shift back to the first part of the palette LUT
 .odd:
 
         dec     dx
@@ -367,6 +380,7 @@ move_cursor:
 
         ; move the cursor, unless it is locked
         cli
+		
         push    bx
         push    ax
         cmp     word [cursor_lock],0
@@ -891,8 +905,10 @@ set_palette:
 		dec		dx
 		jnz		.palette_loop
 		
+		mov		byte [cs:need_fullscreen_refresh], 1
+		
 		; update the screen if we have the framebuffer segment stored
-		mov		si,	[framebuffer_segment_cache]
+		mov		si,	word [framebuffer_segment_cache]
 		cmp		si, 0
 		jz 		.finish_palette_update
 		
