@@ -33,12 +33,12 @@ entry:  jmp     dispatch
 
 ; magic numbers followed by two pascal strings
 signature       db      00h, 21h, 43h, 65h, 87h, 00h
-driver_name     db      7, "cgacomp"
-description     db      25, "CGA Composite - 16 Colors"
+driver_name     db      7, "cgagrey"
+description     db      25, "CGA Greyscale"
 
 %include "cgacommon.i"
 
-%include "cgacomp_tables.i"
+%include "cgagrey_tables.i"
 
 ;-------------- init_video_mode-----------------------------------------
 ; Initializes the video mode provided by this driver and returns the
@@ -58,11 +58,6 @@ init_video_mode:
         ; set video mode 6 (640x200 - 2 colors)
         mov     ax,6
         int     10h
-		
-		; enable colour burst
-		mov dx, 0x3d8
-		mov al, 0x1a
-		out dx, al
 
         ; restore mode number
         pop     ax

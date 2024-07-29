@@ -60,24 +60,10 @@ cursor_new_y    dw      0
 cursor_lock     dw      0
 
 
-; Converts from 8 bit palette value to CGA pattern					
-convert_palette		db	0,32,48,48,51,102,243,239,32,34,34,162,162,162,170,174,
-					db	32,34,34,162,170,174,174,238,48,34,162,51,174,174,238,238,
-					db	16,16,16,17,17,17,81,102,16,17,17,81,81,81,85,93,
-					db	16,16,16,17,17,17,81,102,48,34,162,51,174,174,238,238,
-					db	0,32,32,32,32,16,32,32,16,48,32,32,48,34,16,34,
-					db	16,48,34,16,48,34,48,48,48,48,48,48,34,34,34,48,
-					db	34,34,17,48,48,34,34,34,17,17,34,48,48,48,34,17,
-					db	17,48,162,34,17,48,162,17,17,17,17,17,17,17,162,17,
-					db	17,51,17,51,162,17,162,17,162,51,17,81,162,17,162,17,
-					db	17,17,17,51,51,81,17,162,17,51,81,81,81,162,17,17,
-					db	17,51,81,51,81,81,81,17,51,51,81,81,17,51,51,17,
-					db	81,81,81,81,162,81,51,81,81,51,51,81,81,81,81,102,
-					db	102,81,81,81,81,162,81,81,102,81,81,81,102,81,102,102,
-					db	81,102,81,102,81,81,174,81,102,102,81,81,102,81,102,81,
-					db	81,243,243,102,174,93,102,93,93,243,93,93,243,243,93,221,
-					db	93,221,221,174,238,221,221,221,221,239,238,238,223,223,239,255
+; Converts from 8 bit palette value to CGA pattern	
+convert_palette		times 256 dw 0				
 	
+framebuffer_segment_cache	dw	0
 
 	
 ;-------------- dispatch -----------------------------------------------
@@ -155,6 +141,7 @@ restore_mode:
 ;               the rectangle and has to lock it, otherwise.
 ;-----------------------------------------------------------------------
 update_rect:
+		mov		[framebuffer_segment_cache], si
 
         shr     bx,1
         shr     bx,1
@@ -245,6 +232,7 @@ update_rect:
 		mov		bp,05000h
 		mov		dx,200
 		;;
+		mov 	cl, 0
 		
 .y_loop:
 		mov ah, cl
@@ -260,25 +248,21 @@ update_rect:
 		; use conversion table for each byte
         lodsb
 		cs      xlatb
-		ror		al,cl
 		and		al,0c0h
 		or		ah,al
 
         lodsb
 		cs      xlatb
-		ror		al,cl
 		and		al,30h
 		or		ah,al
 
         lodsb
 		cs      xlatb
-		ror		al,cl
 		and		al,0ch
 		or		ah,al
 
         lodsb
 		cs      xlatb
-		ror		al,cl
 		and		al,03h
 		or		ah,al
 		
@@ -294,15 +278,17 @@ update_rect:
         pop     si
         add     si,320
 		
-		mov 	cl, 4
+		;mov 	cl, 4
 		
         ; handle scanline interleaving
+		add		bx, 256
         add     di,8192
         cmp     di,16384
         jb      .odd
         sub     di,16304
+		sub		bx, 512
 		
-		mov 	cl, 0
+		;mov 	cl, 0
 .odd:
 
         dec     dx
@@ -835,13 +821,17 @@ set_palette:
 		push	es
 		push	si
 		push	di
+		push	bp
 
 		;int		29h
 		add		si, 260
 		
+		; bp value will point to the intensity table
+		mov		bp, si
+		add		bp, 1024
+		
 		mov		ds, ax
 		mov		dx, 256
-		mov		bx, convert_323_palette
 		
 		mov		ax, cs
 		mov		es, ax
@@ -850,8 +840,16 @@ set_palette:
 .palette_loop:
 		xor		ah, ah
 		
-		lodsb		; Skip flags
+		lodsb		; Load flags
+		;cmp		al, 1
+		;je		.calculate_rgb_value
+		;
+		;; not processing this entry
+		;inc		di
+		;add		si, 3
+		;jmp		.palette_loop_next
 
+.calculate_rgb_value:
 		lodsb		; Load red
 		and		al, 0xe0
 		or		ah, al
@@ -868,17 +866,44 @@ set_palette:
 		shr		al, cl
 		or		ah, al
 		
+		mov		al,	[ds:bp]		; Load intensity value (0-100 range)
+		add		bp, 2
+		mov		bx, intensity_mask
+		cs      xlatb			; Load intensity mask into AL
 		
-		
-		xchg	al, ah
+		and		al, ah			; Apply RGB value with intensity mask
 				
-		cs      xlatb	; Convert RGB value to CGA pattern
+		xor		ah, ah			; Convert to look up index into array
+		shl		ax, 1
+
+		mov		bx, ax
+		mov		ax, [cs:convert_323_palette + bx]
+		;mov		bx, convert_323_palette
+		;cs      xlatb	; Convert RGB value to CGA pattern
 		
 		stosb		; Store pattern in palette look up table
+		add		di, 255
+		xchg	al, ah
+		stosb
+		sub		di, 256
 
+.palette_loop_next:
 		dec		dx
 		jnz		.palette_loop
 		
+		; update the screen if we have the framebuffer segment stored
+		mov		si,	[framebuffer_segment_cache]
+		cmp		si, 0
+		jz 		.finish_palette_update
+		
+		xor		ax, ax
+		xor		bx, bx
+		mov		cx, 200
+		mov		dx, 320
+		;call	update_rect
+		
+.finish_palette_update:
+		pop		bp
 		pop		di
 		pop		si
 		pop		es
