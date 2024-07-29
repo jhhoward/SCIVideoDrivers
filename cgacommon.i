@@ -59,13 +59,11 @@ cursor_new_y    dw      0
 
 cursor_lock     dw      0
 
-
-; Converts from 8 bit palette value to CGA pattern	
-convert_palette		times 256 dw 0				
-	
 framebuffer_segment_cache	dw	0
 need_fullscreen_refresh		db  0
 
+; Converts from 8 bit palette value to CGA pattern	
+convert_palette		times 256 dw 0				
 	
 ;-------------- dispatch -----------------------------------------------
 ; This is the dispatch routine that delegates the incoming far-call to
@@ -142,7 +140,11 @@ restore_mode:
 ;               the rectangle and has to lock it, otherwise.
 ;-----------------------------------------------------------------------
 update_rect:
-		mov		word [framebuffer_segment_cache], si
+		mov		word [cs:framebuffer_segment_cache], si
+
+		; Check if we need a full screen refresh and can skip the cursor lock check
+		test	byte [cs:need_fullscreen_refresh], 1
+		jnz		.skip_lock_check
 
 		; round X values to the nearest multiple of 4
         shr     bx,1
@@ -150,7 +152,7 @@ update_rect:
         add     dx,3
         shr     dx,1
         shr     dx,1
-		
+
         ; load and convert cursor x
         mov     bp,[cursor_x]
         shr     bp,1
@@ -172,6 +174,7 @@ update_rect:
         sub     bp,ax
         jl      .just_lock
 
+.skip_lock_check:
         ; locking the cursor is not enough -> hide it
         push    ax
         push    bx
@@ -193,14 +196,14 @@ update_rect:
 .just_hide:
         pushf
 
+
         mov     bp,0b800h
         mov     es,bp
         push    ds
         mov     ds,si
 		
 		; Check if we need a full screen refresh
-		mov		bp, [cs:need_fullscreen_refresh]
-		test	bp, 1
+		test	byte [cs:need_fullscreen_refresh], 1		
 		jz		.partial_screen_refresh
 		
 		; Need a full screen refresh due to palette change
@@ -908,7 +911,7 @@ set_palette:
 		mov		byte [cs:need_fullscreen_refresh], 1
 		
 		; update the screen if we have the framebuffer segment stored
-		mov		si,	word [framebuffer_segment_cache]
+		mov		si,	word [cs:framebuffer_segment_cache]
 		cmp		si, 0
 		jz 		.finish_palette_update
 		
@@ -916,6 +919,7 @@ set_palette:
 		xor		bx, bx
 		mov		cx, 200
 		mov		dx, 320
+	
 		;call	update_rect
 		
 .finish_palette_update:

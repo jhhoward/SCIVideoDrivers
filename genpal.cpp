@@ -7,6 +7,7 @@
 #define USE_ALL_DITHERS 1
 #define USE_MAGENTA_PALETTE 0
 #define USE_BRIGHT_PALETTE 1
+#define USE_EXTENDED_COMPOSITE_DITHERING 0
 
 #define MAX_COMPOSITE_DITHER_DISTANCE 180 //160
 
@@ -406,8 +407,14 @@ uint8_t patternsRGB[NUM_PATTERNS * 3];
 uint8_t patternsRGBWeights[NUM_PATTERNS];
 uint8_t convertLUT[256];
 
-uint8_t compositePatternRGB[256 * 3];
-uint8_t compositePatternRGBWeights[256];
+#if USE_EXTENDED_COMPOSITE_DITHERING
+#define NUM_COMPOSITE_ENTRIES 512
+#else
+#define NUM_COMPOSITE_ENTRIES 256
+#endif
+
+uint8_t compositePatternRGB[NUM_COMPOSITE_ENTRIES * 3];
+uint8_t compositePatternRGBWeights[NUM_COMPOSITE_ENTRIES];
 
 uint8_t greyPatternRGB[256 * 3];
 
@@ -745,11 +752,24 @@ void GeneratePaletteLookupTables()
 				
 				//int compositeMatch = FindClosestPaletteEntry(rgb, compositePalette, 16);
 				//uint8_t compositePattern = (uint8_t)(compositeMatch | (compositeMatch << 4));
-				int compositePattern = FindClosestPaletteEntry(rgb, compositePatternRGB, 256, compositePatternRGBWeights);
-				uint16_t compositePatternOutput = (uint16_t) (compositePattern << 8);
-				compositePatternOutput |= (compositePattern >> 4) | ((compositePattern & 0xf) << 4);
+				int compositePattern = FindClosestPaletteEntry(rgb, compositePatternRGB, NUM_COMPOSITE_ENTRIES, compositePatternRGBWeights);
 				
-				compositePatternLookup[index] = compositePatternOutput;
+				if(compositePattern > 256)
+				{
+					printf("X");
+					int patternB = compositePattern & 0xf;
+					int patternA = (compositePattern & 0xf0) >> 8;
+					uint16_t compositePatternOutput = (compositePattern & 0xff) | (patternB | (patternB << 8));
+					compositePatternLookup[index] = compositePatternOutput;
+				}
+				else
+				{
+					printf("_");
+					uint16_t compositePatternOutput = (uint16_t) (compositePattern << 8);
+					compositePatternOutput |= (compositePattern >> 4) | ((compositePattern & 0xf) << 4);
+					
+					compositePatternLookup[index] = compositePatternOutput;
+				}
 				
 				int greyscale = (int) (RGBtoGreyscale(rgb) * 16 / 255);
 				
@@ -1094,7 +1114,7 @@ void GenerateCompositePaletteRGB(uint8_t* palette)
 			compositePatternRGB[index * 3] = (uint8_t) red;
 			compositePatternRGB[index * 3 + 1] = (uint8_t) green;
 			compositePatternRGB[index * 3 + 2] = (uint8_t) blue;
-			compositePatternRGBWeights[index] = (x == y) ? 2 : 3;
+			compositePatternRGBWeights[index] = (x == y) ? 7 : 12;
 			
 			int pairDistance = 0;
 			for(int n = 0; n < 3; n++)
@@ -1112,6 +1132,38 @@ void GenerateCompositePaletteRGB(uint8_t* palette)
 			}
 		}
 	}
+	
+#if USE_EXTENDED_COMPOSITE_DITHERING
+	for(int x = 0; x < 16; x++)
+	{
+		for(int y = 0; y < 16; y++)
+		{
+			int index = y * 16 + x + 256;
+			int red = (palette[x * 3] * 3 + palette[y * 3]) / 4;
+			int green = (palette[x * 3 + 1] * 3 + palette[y * 3 + 1]) / 4;
+			int blue = (palette[x * 3 + 2] * 3 + palette[y * 3 + 2]) / 4;
+			compositePatternRGB[index * 3] = (uint8_t) red;
+			compositePatternRGB[index * 3 + 1] = (uint8_t) green;
+			compositePatternRGB[index * 3 + 2] = (uint8_t) blue;
+			compositePatternRGBWeights[index] = 21;
+			
+			int pairDistance = 0;
+			for(int n = 0; n < 3; n++)
+			{
+				int dist = palette[x * 3 + n] - palette[y * 3 + n];
+				pairDistance += dist * dist;
+			}
+			if(pairDistance > MAX_COMPOSITE_DITHER_DISTANCE * MAX_COMPOSITE_DITHER_DISTANCE)
+			{
+				compositePatternRGBWeights[index] = -1;	
+			}
+			else
+			{
+				numCompositePatterns++;
+			}
+		}
+	}
+#endif
 	
 	//printf("Num composite patterns: %d\n", numCompositePatterns);
 	
