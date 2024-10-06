@@ -21,9 +21,9 @@ call_tab        dw      get_color_depth         ; bp = 0
                 dw      init_video_mode         ; bp = 2
                 dw      restore_mode            ; bp = 4
                 dw      update_rect             ; bp = 6
-                dw      show_cursor             ; bp = 8
-                dw      hide_cursor             ; bp = 10
-                dw      move_cursor             ; bp = 12
+                dw      show_cursor_dummy             ; bp = 8
+                dw      hide_cursor_dummy             ; bp = 10
+                dw      move_cursor_dummy             ; bp = 12
                 dw      load_cursor             ; bp = 14
                 dw      shake_screen            ; bp = 16
                 dw      scroll_rect             ; bp = 18
@@ -62,6 +62,18 @@ cursor_lock     dw      0
 framebuffer_segment_cache	dw	0
 need_fullscreen_refresh		db  0
 
+cursor_visibility	dw		0
+
+cursor_struct_data:
+CURxDim		   dw 		16         ;CURxDim
+CURyDim		   dw 		16         ;CURyDim
+CURxHot		   dw 		0          ;CURxhot  = (xDim-1)/2 - xHot
+CURyHot		   dw 		0          ;CURyhot  = yDim -1 -yHot
+CURskipColor	db 		20h           ;alc (one that won't work)
+CURUnused		db 		000h           ;availble
+
+cursor_data_temp	times 1024 db 0
+
 ; Converts from 8 bit palette value to CGA pattern	
 convert_palette		times 256 dw 0				
 	
@@ -77,6 +89,13 @@ dispatch:
         ; save segments & set ds to cs
         push    es
         push    ds
+		push	si
+		push	di
+		push	bp
+		push	bx
+		push	cx
+		pushf
+		
         push    cs
         pop     ds
 
@@ -84,6 +103,12 @@ dispatch:
         call    [cs:call_tab+bp]
 
         ; restore segments
+		popf
+		pop		cx
+		pop		bx
+		pop		bp
+		pop		di
+		pop		si
         pop     ds
         pop     es
 
@@ -422,6 +447,10 @@ move_cursor:
 ;               The most significant bit is the left-most pixel.
 ;-----------------------------------------------------------------------
 load_cursor:
+		mov dx, cs
+		mov ax, [cursor_struct_data]
+		ret
+
         ; copy the new cursor to the internal cursor data structure
         push    ds
         mov     ds,ax
@@ -556,6 +585,7 @@ dummy_fn:
 ; Returns:      --
 ;-----------------------------------------------------------------------
 draw_cursor:
+		ret
         ; calculate on-screen cursor dimensions
         mov     ax,200
         sub     ax,[cursor_y]
@@ -722,6 +752,7 @@ draw_cursor:
 ; Returns:      --
 ;-----------------------------------------------------------------------
 restore_background:
+		ret
         mov     ax,0b800h
         mov     es,ax
 
@@ -933,4 +964,18 @@ set_palette:
 		pop		ax
 		pop		ds
 
+		ret
+		
+		
+show_cursor_dummy:
+		dec		word [cs:cursor_visibility]
+		mov		ax, [cs:cursor_visibility]
+		ret
+
+hide_cursor_dummy:
+		inc		word [cs:cursor_visibility]
+		mov		ax, [cs:cursor_visibility]
+		ret
+
+move_cursor_dummy:
 		ret
