@@ -338,6 +338,58 @@ int greyscaleKernel[] =
 	6, 10, 8, 12, 2, 14, 4, 16,
 };
 
+int greyscaleKernel2[] =
+{
+	1, 3, 1, 3, 1, 3, 1, 3,
+	4, 2, 4, 2, 4, 2, 4, 2
+};
+
+#define NUM_GREYSCALE_PATTERNS 7
+char* greyscalePatterns =
+	"........"
+	"........"
+
+	"#......."
+	"....#..."
+
+	"#...#..."
+	"..#...#."
+
+	"#.#.#.#."
+	".#.#.#.#"
+
+	".###.###"
+	"##.###.#"
+
+	".#######"
+	"####.###"
+
+	"########"
+	"########";
+
+uint16_t GetGreyscalePattern(uint8_t value)
+{
+	int index = (value * NUM_GREYSCALE_PATTERNS) / 255;
+	if(index >= NUM_GREYSCALE_PATTERNS)
+		index = NUM_GREYSCALE_PATTERNS - 1;
+	
+	if(index == 0 && value > 0)
+		index = 1;
+	
+	char* pattern = greyscalePatterns + (index * 16);
+	uint16_t result = 0;
+	
+	for(int n = 0; n < 16; n++)
+	{
+		if(pattern[n] == '#')
+		{
+			result |= (1 << n);
+		}
+	}
+	
+	return result;
+}
+
 // When using 640x200 mode with colour burst enabled
 uint8_t compositePalette[] =
 {
@@ -421,6 +473,7 @@ void GenerateExtendedDitherPatternsRGB(uint8_t* palette)
 		int r = 0, g = 0, b = 0;
 		uint8_t weight = 0;
 		int differences = 0;
+		bool hasBlack = false;
 		
 		for(int i = 0; i < EXTENDED_DITHER_PATTERN_SIZE; i++)
 		{
@@ -433,8 +486,39 @@ void GenerateExtendedDitherPatternsRGB(uint8_t* palette)
 			{
 				differences++;
 			}
+			
+			if(!palette[index * 3] && !palette[index * 3 + 1] && !palette[index * 3 + 2])
+				hasBlack = true;
+		}
+
+		r /= EXTENDED_DITHER_PATTERN_SIZE;
+		g /= EXTENDED_DITHER_PATTERN_SIZE;
+		b /= EXTENDED_DITHER_PATTERN_SIZE;
+		
+#if 0
+		switch(differences)
+		{
+			case 0:
+			weight = 7;//6;
+			if(r == 0 && g == 0 && b == 0)
+				weight = 60;
+			break;
+			case EXTENDED_DITHER_PATTERN_SIZE / 2:
+			weight = 10;
+			break;
+			default:
+			weight = 10;
+			break;
 		}
 		
+		if(differences)
+		{
+			if(hasBlack)
+			{
+				weight = 60;
+			}
+		}
+#else		
 		switch(differences)
 		{
 			case 0:
@@ -448,13 +532,11 @@ void GenerateExtendedDitherPatternsRGB(uint8_t* palette)
 			break;
 		}
 
+//		weight = differences ? 10 : 7;
 		weight = differences ? 10 : 7;
+#endif		
 		
-		
-		r /= EXTENDED_DITHER_PATTERN_SIZE;
-		g /= EXTENDED_DITHER_PATTERN_SIZE;
-		b /= EXTENDED_DITHER_PATTERN_SIZE;
-		
+				
 		extendedDitherPatternRGB[n * 3] = (uint8_t) r;
 		extendedDitherPatternRGB[n * 3 + 1] = (uint8_t) g;
 		extendedDitherPatternRGB[n * 3 + 2] = (uint8_t) b;
@@ -523,7 +605,7 @@ void GenerateGreyPatternsRGB()
 			}
 		}
 		
-		intensity = (intensity * 255) / 8;
+		intensity = (intensity * 255) / 8;		
 		
 		greyPatternRGB[n * 3] = (uint8_t)(intensity);
 		greyPatternRGB[n * 3 + 1] = (uint8_t)(intensity);
@@ -751,17 +833,20 @@ void GeneratePaletteLookupTables()
 				
 				compositePatternLookup[index] = compositePatternOutput;
 				
-				int greyscale = (int) (RGBtoGreyscale(rgb) * 16 / 255);
+				int greyscale = (int) (RGBtoGreyscale(rgb) * 5 / 255);
 				
 				uint16_t greyPattern = 0;
 				
 				for(int n = 0; n < 16; n++)
 				{
-					if(greyscale > greyscaleKernel[n])
+					if(greyscale >= greyscaleKernel2[n])
 					{
 						greyPattern |= (1 << n);
 					}
 				}
+				
+				greyPattern  = GetGreyscalePattern(RGBtoGreyscale(rgb));
+				
 				//int greyPatternIndex = FindClosestPaletteEntry(rgb, greyPatternRGB, 256);
 				//uint8_t greyPattern = 0;
 				//for(int n = 0; n < 8; n++)
@@ -776,6 +861,26 @@ void GeneratePaletteLookupTables()
 				index++;
 			}
 		}
+	}
+	
+	for(int i = 0; i < 16; i++)
+	{
+		printf("%d:\n", i);
+		
+		for(int j = 0; j < 16; j++)
+		{
+			if(i >= greyscaleKernel2[j])
+			{
+				printf("#");
+			}
+			else
+			{
+				printf(".");
+			}
+			if(j == 7)
+				printf("\n");
+		}
+		printf("\n");
 	}
 	
 	for(int n = 0; n <= 100; n++)
@@ -1265,8 +1370,8 @@ void ProcessExtendedDitherPatterns(uint8_t* palette)
 
 int main(int argc, char* argv[])
 {
-	GenerateExtendedDitherPatternsRGB(palette_brcg);
-	ProcessExtendedDitherPatterns(palette_brcg);
+	GenerateExtendedDitherPatternsRGB(palette_brcw);
+	ProcessExtendedDitherPatterns(palette_brcw);
 	//
 	//GenerateExtendedDitherPatternsRGB(palette_bgry);
 	//ProcessExtendedDitherPatterns(palette_bgry);
@@ -1274,7 +1379,7 @@ int main(int argc, char* argv[])
 	//GenerateExtendedDitherPatternsRGB(palette_bgrb);
 	//ProcessExtendedDitherPatterns(palette_bgrb);
 	
-	GeneratePatternsRGB(palette_brcg);
+	GeneratePatternsRGB(palette_brcw);
 	GenerateCompositePaletteRGB(compositePalette);
 	GenerateGreyPatternsRGB();
 	

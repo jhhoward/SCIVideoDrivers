@@ -21,15 +21,15 @@ call_tab        dw      get_color_depth         ; bp = 0
                 dw      init_video_mode         ; bp = 2
                 dw      restore_mode            ; bp = 4
                 dw      update_rect             ; bp = 6
-                dw      show_cursor             ; bp = 8
-                dw      hide_cursor             ; bp = 10
-                dw      move_cursor             ; bp = 12
-                dw      load_cursor             ; bp = 14
+                dw      show_cursor_dummy             ; bp = 8
+                dw      hide_cursor_dummy             ; bp = 10
+                dw      move_cursor_dummy             ; bp = 12
+                dw      load_cursor_dummy             ; bp = 14
                 dw      shake_screen            ; bp = 16
                 dw      scroll_rect             ; bp = 18
 				dw		set_palette				; bp = 20 V_SETPALETTE
 				dw		dummy_fn				; bp = 22 V_GETPALETTE
-				dw		dummy_fn				; bp = 24 V_SETPALETTE_CYCLE
+				dw		set_palette				; bp = 24 V_SETPALETTE_CYCLE
 				dw		dummy_fn				; bp = 26 V_RECT_DISPLAY
 				dw		dummy_fn				; bp = 28 V_SETMODE
 				dw		dummy_fn				; bp = 30 V_DISPLAYPAGE
@@ -42,8 +42,45 @@ call_tab        dw      get_color_depth         ; bp = 0
 
 ; active mouse cursor in the internal pixel format
 ; five bytes per line (four bytes mask data + one padding byte)
-cursor_and      times   80 db 0                 ; inverted and-mask
-cursor_or       times   80 db 0                 ; or-mask
+
+cursor_and		db	11110000b, 00000000b, 00000000b,  00000000b, 00000000b
+				db	11111100b, 00000000b, 00000000b,  00000000b, 00000000b
+				db	11111111b, 00000000b, 00000000b,  00000000b, 00000000b
+				db	11111111b, 11000000b, 00000000b,  00000000b, 00000000b
+				db	11111111b, 11110000b, 00000000b,  00000000b, 00000000b
+				db	11111111b, 11111100b, 00000000b,  00000000b, 00000000b
+				db	11111111b, 11111111b, 00000000b,  00000000b, 00000000b
+				db	11111111b, 11111111b, 11000000b,  00000000b, 00000000b
+				db	11111111b, 11111111b, 11110000b,  00000000b, 00000000b
+				db	11111111b, 11111111b, 11111100b,  00000000b, 00000000b
+				db	11111111b, 11111100b, 00000000b,  00000000b, 00000000b
+				db	11111111b, 11111111b, 00000000b,  00000000b, 00000000b
+				db	11110000b, 11111111b, 00000000b,  00000000b, 00000000b
+				db	00000000b, 11111111b, 00000000b,  00000000b, 00000000b
+				db	00000000b, 11111111b, 00000000b,  00000000b, 00000000b
+				db	00000000b, 00111100b, 00000000b,  00000000b, 00000000b
+
+cursor_or		db	00000000b, 00000000b, 00000000b,  00000000b, 00000000b
+				db	00110000b, 00000000b, 00000000b,  00000000b, 00000000b
+				db	00111100b, 00000000b, 00000000b,  00000000b, 00000000b
+				db	00111111b, 00000000b, 00000000b,  00000000b, 00000000b
+				db	00111111b, 11000000b, 00000000b,  00000000b, 00000000b
+				db	00111111b, 11110000b, 00000000b,  00000000b, 00000000b
+				db	00111111b, 11111100b, 00000000b,  00000000b, 00000000b
+				db	00111111b, 11111111b, 00000000b,  00000000b, 00000000b
+				db	00111111b, 11111111b, 11000000b,  00000000b, 00000000b
+				db	00111111b, 11110000b, 00000000b,  00000000b, 00000000b
+				db	00111100b, 11110000b, 00000000b,  00000000b, 00000000b
+				db	00110000b, 00111100b, 00000000b,  00000000b, 00000000b
+				db	00000000b, 00111100b, 00000000b,  00000000b, 00000000b
+				db	00000000b, 00001111b, 00000000b,  00000000b, 00000000b
+				db	00000000b, 00001111b, 00000000b,  00000000b, 00000000b
+				db	00000000b, 00000000b, 00000000b,  00000000b, 00000000b
+				
+				
+
+cursor_storage	times 1024 dw 0	
+
 
 ; saved background pixels overwritten by the cursor
 cursor_bg       times   160 db 0
@@ -99,7 +136,7 @@ dispatch:
 ; Notes:        The PC1512 driver returns the word -1, instead.
 ;-----------------------------------------------------------------------
 get_color_depth:
-        mov     ax,4
+        mov     ax,16
         ret
 
 ;-------------- restore_mode -------------------------------------------
@@ -142,7 +179,7 @@ restore_mode:
 ;               the rectangle and has to lock it, otherwise.
 ;-----------------------------------------------------------------------
 update_rect:
-		mov		word [framebuffer_segment_cache], si
+		mov		word [cs:framebuffer_segment_cache], si
 
 		; round X values to the nearest multiple of 4
         shr     bx,1
@@ -908,7 +945,7 @@ set_palette:
 		mov		byte [cs:need_fullscreen_refresh], 1
 		
 		; update the screen if we have the framebuffer segment stored
-		mov		si,	word [framebuffer_segment_cache]
+		mov		si,	word [cs:framebuffer_segment_cache]
 		cmp		si, 0
 		jz 		.finish_palette_update
 		
@@ -929,4 +966,89 @@ set_palette:
 		pop		ax
 		pop		ds
 
+		ret
+		
+		
+cur_vis_level	dw		0
+
+; if(C <= 1)
+;	{
+;		C++
+;	}
+;	else
+;	{
+;		C = 1
+;	}
+;	return C
+;
+;
+		
+
+show_cursor_dummy:
+		cmp		word [cs:cur_vis_level], 1
+		je		.skip
+		call	show_cursor
+.skip:
+		mov		ax,1
+		mov		[cs:cur_vis_level], ax
+		
+		ret
+
+hide_cursor_dummy:
+		cmp		word [cs:cur_vis_level], 0
+		je		.skip
+		call	hide_cursor
+.skip:
+		mov		ax,0
+		mov		[cs:cur_vis_level], ax
+		ret
+
+show_cursor_dummy2:
+		cmp		word [cs:cur_vis_level], 1
+		jle 	.lab1
+		mov		ax,1
+		mov		[cs:cur_vis_level], ax
+		jmp		.lab2
+.lab1:
+		call show_cursor
+		inc 	word [cs:cur_vis_level]
+		cmp		word [cs:cur_vis_level], 1
+		jnz		.lab2
+.lab2:
+		mov		ax, [cs:cur_vis_level]
+		ret
+		
+hide_cursor_dummy2:
+		;mov		word [cs:cursor_counter], 1
+		;call hide_cursor
+		dec 	word [cs:cur_vis_level]
+		mov		ax, [cs:cur_vis_level]
+		ret
+		
+move_cursor_dummy:
+		call move_cursor
+;		shr ax, 1
+;		shr ax, 1
+;		mov di, ax
+;		
+;		shr bx, 1
+;		mov al, 80
+;		mul bl
+;		
+;		add di, ax
+;		
+;		mov bx, 0b800h
+;		mov es, bx
+;		mov byte [es:di], 0xf
+		
+		xor ax, ax
+		xor dx, dx
+		ret
+		
+load_cursor_dummy:
+		call hide_cursor
+		call show_cursor
+		mov dx, cs
+		mov ax, cursor_storage
+;		mov ax, cursor_and
 		ret

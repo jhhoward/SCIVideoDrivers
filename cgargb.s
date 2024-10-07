@@ -56,29 +56,29 @@ init_video_mode:
         push    ax
 
         ; set video mode 5 (320x200 - 4 colors red/cyan)
-        mov     ax,5
+        mov     ax,4
         int     10h
 		
-		; set intense palette
-		mov dx, 0x3d9
-		mov al, 0x30
-		out dx, al
-
-		; enable red/cyan palette for EGA/VGA cards
-		; set red
-		mov ax, 0x1000
-		mov bx, 0x3c02
-		int 0x10
-
-		; set cyan
-		mov ax, 0x1000
-		mov bx, 0x3b01
-		int 0x10
-
-		; set white
-		mov ax, 0x1000
-		mov bx, 0x3f03
-		int 0x10
+;		; set intense palette
+;		mov dx, 0x3d9
+;		mov al, 0x30
+;		out dx, al
+;
+;		; enable red/cyan palette for EGA/VGA cards
+;		; set red
+;		mov ax, 0x1000
+;		mov bx, 0x3c02
+;		int 0x10
+;
+;		; set cyan
+;		mov ax, 0x1000
+;		mov bx, 0x3b01
+;		int 0x10
+;
+;		; set white
+;		mov ax, 0x1000
+;		mov bx, 0x3f03
+;		int 0x10
 
         ; restore mode number
         pop     ax
