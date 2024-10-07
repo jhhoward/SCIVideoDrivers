@@ -804,6 +804,7 @@ void GeneratePaletteLookupTables()
 	uint16_t patternLookup[256];
 	uint16_t patternLookupNoDither[256];
 	uint16_t compositePatternLookup[256];
+	uint16_t compositePatternLookupNoDither[256];
 	uint16_t greyPatternLookup[256];
 	uint8_t intensityMask[101];
 	
@@ -860,6 +861,9 @@ void GeneratePaletteLookupTables()
 				
 				compositePatternLookup[index] = compositePatternOutput;
 				
+				compositePattern = FindClosestPaletteEntry(rgb, compositePalette, 16);
+				compositePatternLookupNoDither[index] = compositePattern | (compositePattern << 4) | (compositePattern << 8) | (compositePattern << 12);
+				
 				int greyscale = (int) (RGBtoGreyscale(rgb) * 5 / 255);
 				
 				uint16_t greyPattern = 0;
@@ -890,6 +894,7 @@ void GeneratePaletteLookupTables()
 		}
 	}
 	
+	#if 0
 	for(int i = 0; i < 16; i++)
 	{
 		printf("%d:\n", i);
@@ -909,6 +914,7 @@ void GeneratePaletteLookupTables()
 		}
 		printf("\n");
 	}
+	#endif
 	
 	for(int n = 0; n <= 100; n++)
 	{
@@ -1001,6 +1007,18 @@ void GeneratePaletteLookupTables()
 			}
 			fprintf(fs, "\n");
 		}
+		fprintf(fs, "convert_323_palette_nodither\t");
+		for(int y = 0; y < 16; y++)
+		{
+			fprintf(fs, "\tdw\t");
+			for(int x = 0; x < 16; x++)
+			{
+				int index = y * 16 + x;
+				fprintf(fs, "%d,", compositePatternLookupNoDither[index]);
+			}
+			fprintf(fs, "\n");
+		}
+		
 	}
 	fclose(fs);
 
@@ -1032,6 +1050,17 @@ void GeneratePaletteLookupTables()
 			if(y == 9)
 			{
 				fprintf(fs, "%d", intensityMask[100]);
+			}
+			fprintf(fs, "\n");
+		}
+		fprintf(fs, "convert_323_palette_nodither\t");
+		for(int y = 0; y < 16; y++)
+		{
+			fprintf(fs, "\tdw\t");
+			for(int x = 0; x < 16; x++)
+			{
+				int index = y * 16 + x;
+				fprintf(fs, "%d,", greyPatternLookup[index]);
 			}
 			fprintf(fs, "\n");
 		}

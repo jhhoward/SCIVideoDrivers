@@ -16,15 +16,24 @@
 ; License along with this library; if not, write to the Free Software
 ; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
+%define USE_VIEW_CURSORS 1
+
 ; call-table for the dispatcher
 call_tab        dw      get_color_depth         ; bp = 0
                 dw      init_video_mode         ; bp = 2
                 dw      restore_mode            ; bp = 4
                 dw      update_rect             ; bp = 6
+%if USE_VIEW_CURSORS == 1
                 dw      show_cursor_dummy             ; bp = 8
                 dw      hide_cursor_dummy             ; bp = 10
                 dw      move_cursor_dummy             ; bp = 12
                 dw      load_cursor_dummy             ; bp = 14
+%else
+                dw      show_cursor	             ; bp = 8
+                dw      hide_cursor	             ; bp = 10
+                dw      move_cursor	             ; bp = 12
+                dw      load_cursor	             ; bp = 14
+%endif
                 dw      shake_screen            ; bp = 16
                 dw      scroll_rect             ; bp = 18
 				dw		set_palette				; bp = 20 V_SETPALETTE
@@ -188,6 +197,11 @@ update_rect:
         shr     dx,1
         shr     dx,1
 		
+		; full screen refresh needs to hide the cursor
+		mov		bp, [cs:need_fullscreen_refresh]
+		test	bp, 1
+		jnz		.need_hide_cursor
+		
         ; load and convert cursor x
         mov     bp,[cursor_x]
         shr     bp,1
@@ -209,6 +223,7 @@ update_rect:
         sub     bp,ax
         jl      .just_lock
 
+.need_hide_cursor
         ; locking the cursor is not enough -> hide it
         push    ax
         push    bx
@@ -884,7 +899,7 @@ set_palette:
 		mov		ds, ax
 
 ;;;;;;;;;;;;;;;;;;;
-		mov		dx, 256
+		mov		dx, NUM_UNDITHERED_COLOURS
 		
 		mov		ax, cs
 		mov		es, ax
@@ -934,6 +949,55 @@ set_palette:
 .palette_loop_next:
 		dec		dx
 		jnz		.palette_loop
+;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;
+		mov		dx, 256-NUM_UNDITHERED_COLOURS
+	
+.palette_loop2:
+		xor		ah, ah
+		
+		lodsb		; Load flags
+
+.calculate_rgb_value2:
+		lodsb		; Load red
+		and		al, 0xe0
+		or		ah, al
+		
+		lodsb		; Load green
+		and		al, 0xc0
+		mov		cl, 3
+		shr		al, cl
+		or		ah, al
+		
+		lodsb		; Load blue
+		and		al, 0xe0
+		mov		cl, 5
+		shr		al, cl
+		or		ah, al
+		
+		mov		al,	[ds:bp]		; Load intensity value (0-100 range)
+		add		bp, 2
+		mov		bx, intensity_mask
+		cs      xlatb			; Load intensity mask into AL
+		
+		and		al, ah			; Apply RGB value with intensity mask
+				
+		xor		ah, ah			; Convert to look up index into array
+		shl		ax, 1
+
+		mov		bx, ax
+		mov		ax, [cs:convert_323_palette + bx]
+		
+		stosb		; Store pattern in palette look up table
+		add		di, 255
+		xchg	al, ah
+		stosb
+		sub		di, 256
+
+.palette_loop_next2:
+		dec		dx
+		jnz		.palette_loop2
 ;;;;;;;;;;;;
 		
 		mov		byte [cs:need_fullscreen_refresh], 1

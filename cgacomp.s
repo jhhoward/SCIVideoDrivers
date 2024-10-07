@@ -36,6 +36,8 @@ signature       db      00h, 21h, 43h, 65h, 87h, 00h
 driver_name     db      7, "cgacomp"
 description     db      25, "CGA Composite - 16 Colors"
 
+%define NUM_UNDITHERED_COLOURS 64
+
 %include "cgacommon.i"
 
 %include "cgacomp_tables.i"

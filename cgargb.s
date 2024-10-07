@@ -36,6 +36,8 @@ signature       db      00h, 21h, 43h, 65h, 87h, 00h
 driver_name     db      6, "cgargb"
 description     db      18, "CGA RGB - 4 Colors"
 
+%define NUM_UNDITHERED_COLOURS 8
+
 %include "cgacommon.i"
 
 %include "cgargb_tables.i"
@@ -56,7 +58,7 @@ init_video_mode:
         push    ax
 
         ; set video mode 5 (320x200 - 4 colors red/cyan)
-        mov     ax,4
+        mov     ax,5
         int     10h
 		
 ;		; set intense palette
