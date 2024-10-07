@@ -466,6 +466,9 @@ uint8_t greyPatternRGB[256 * 3];
 uint8_t extendedDitherPatternRGB[NUM_EXTENDED_DITHER_PATTERNS * 3];
 uint8_t extendedDitherPatternRGBWeights[NUM_EXTENDED_DITHER_PATTERNS];
 
+uint8_t unditheredPaletteRGB[NUM_EXTENDED_DITHER_PATTERNS * 3];
+uint8_t unditheredPaletteRGBWeights[NUM_EXTENDED_DITHER_PATTERNS];
+
 void GenerateExtendedDitherPatternsRGB(uint8_t* palette)
 {
 	for(int n = 0; n < NUM_EXTENDED_DITHER_PATTERNS; n++)
@@ -495,7 +498,21 @@ void GenerateExtendedDitherPatternsRGB(uint8_t* palette)
 		g /= EXTENDED_DITHER_PATTERN_SIZE;
 		b /= EXTENDED_DITHER_PATTERN_SIZE;
 		
-#if 0
+#if 1
+		switch(differences)
+		{
+			case 0:
+			weight = 7;
+			break;
+			case EXTENDED_DITHER_PATTERN_SIZE / 2:
+			weight = 10;
+			break;
+			default:
+			weight = 10;
+			break;
+		}
+
+#elif 0
 		switch(differences)
 		{
 			case 0:
@@ -785,6 +802,7 @@ void GeneratePaletteLookupTables()
 	vector<uint8_t> srcPalOut;
 	vector<uint8_t> dstPalOut;
 	uint16_t patternLookup[256];
+	uint16_t patternLookupNoDither[256];
 	uint16_t compositePatternLookup[256];
 	uint16_t greyPatternLookup[256];
 	uint8_t intensityMask[101];
@@ -824,6 +842,15 @@ void GeneratePaletteLookupTables()
 				dstPalOut.push_back(extendedDitherPatternRGB[match * 3 + 1]);
 				dstPalOut.push_back(extendedDitherPatternRGB[match * 3 + 2]);
 				dstPalOut.push_back(255);
+				
+				match = FindClosestPaletteEntry(rgb, unditheredPaletteRGB, 4, unditheredPaletteRGBWeights);
+				pattern = 0;
+				for(int n = 0; n < 8; n++)
+				{
+					pattern <<= 2;
+					pattern |= (uint8_t)(match);
+				}
+				patternLookupNoDither[index] = pattern;
 				
 				//int compositeMatch = FindClosestPaletteEntry(rgb, compositePalette, 16);
 				//uint8_t compositePattern = (uint8_t)(compositeMatch | (compositeMatch << 4));
@@ -926,6 +953,18 @@ void GeneratePaletteLookupTables()
 			if(y == 9)
 			{
 				fprintf(fs, "%d", intensityMask[100]);
+			}
+			fprintf(fs, "\n");
+		}
+
+		fprintf(fs, "convert_323_palette_nodither\t");
+		for(int y = 0; y < 16; y++)
+		{
+			fprintf(fs, "\tdw\t");
+			for(int x = 0; x < 16; x++)
+			{
+				int index = y * 16 + x;
+				fprintf(fs, "%d,", patternLookupNoDither[index]);
 			}
 			fprintf(fs, "\n");
 		}
@@ -1368,10 +1407,21 @@ void ProcessExtendedDitherPatterns(uint8_t* palette)
 	lodepng::encode("palette323.png", imageOutput, width, height);
 }
 
+void GenerateUnditheredRGB(uint8_t* palette)
+{
+	memcpy(unditheredPaletteRGB, palette, 4 * 3);
+	
+	unditheredPaletteRGBWeights[0] = 10;
+	unditheredPaletteRGBWeights[1] = 3;
+	unditheredPaletteRGBWeights[2] = 3;
+	unditheredPaletteRGBWeights[3] = 3;
+}
+
 int main(int argc, char* argv[])
 {
 	GenerateExtendedDitherPatternsRGB(palette_brcw);
 	ProcessExtendedDitherPatterns(palette_brcw);
+	GenerateUnditheredRGB(palette_brcw);
 	//
 	//GenerateExtendedDitherPatternsRGB(palette_bgry);
 	//ProcessExtendedDitherPatterns(palette_bgry);

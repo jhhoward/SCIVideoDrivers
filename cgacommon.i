@@ -882,6 +882,8 @@ set_palette:
 		add		bp, 1024
 		
 		mov		ds, ax
+
+;;;;;;;;;;;;;;;;;;;
 		mov		dx, 256
 		
 		mov		ax, cs
@@ -892,13 +894,6 @@ set_palette:
 		xor		ah, ah
 		
 		lodsb		; Load flags
-		;cmp		al, 1
-		;je		.calculate_rgb_value
-		;
-		;; not processing this entry
-		;inc		di
-		;add		si, 3
-		;jmp		.palette_loop_next
 
 .calculate_rgb_value:
 		lodsb		; Load red
@@ -928,9 +923,7 @@ set_palette:
 		shl		ax, 1
 
 		mov		bx, ax
-		mov		ax, [cs:convert_323_palette + bx]
-		;mov		bx, convert_323_palette
-		;cs      xlatb	; Convert RGB value to CGA pattern
+		mov		ax, [cs:convert_323_palette_nodither + bx]
 		
 		stosb		; Store pattern in palette look up table
 		add		di, 255
@@ -941,6 +934,7 @@ set_palette:
 .palette_loop_next:
 		dec		dx
 		jnz		.palette_loop
+;;;;;;;;;;;;
 		
 		mov		byte [cs:need_fullscreen_refresh], 1
 		
