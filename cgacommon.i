@@ -16,29 +16,27 @@
 ; License along with this library; if not, write to the Free Software
 ; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-%define USE_VIEW_CURSORS 1
+%define USE_PALETTE_INTENSITY 1
+%define ENABLE_PALETTE_CYCLING 1
 
 ; call-table for the dispatcher
 call_tab        dw      get_color_depth         ; bp = 0
                 dw      init_video_mode         ; bp = 2
                 dw      restore_mode            ; bp = 4
                 dw      update_rect             ; bp = 6
-%if USE_VIEW_CURSORS == 1
-                dw      show_cursor_dummy             ; bp = 8
-                dw      hide_cursor_dummy             ; bp = 10
-                dw      move_cursor_dummy             ; bp = 12
-                dw      load_cursor_dummy             ; bp = 14
-%else
-                dw      show_cursor	             ; bp = 8
-                dw      hide_cursor	             ; bp = 10
-                dw      move_cursor	             ; bp = 12
-                dw      load_cursor	             ; bp = 14
-%endif
+                dw      show_cursor_wrapper      ; bp = 8
+                dw      hide_cursor_wrapper      ; bp = 10
+                dw      move_cursor_wrapper      ; bp = 12
+                dw      load_cursor_wrapper      ; bp = 14
                 dw      shake_screen            ; bp = 16
                 dw      scroll_rect             ; bp = 18
 				dw		set_palette				; bp = 20 V_SETPALETTE
 				dw		dummy_fn				; bp = 22 V_GETPALETTE
+			%if ENABLE_PALETTE_CYCLING == 1
 				dw		set_palette				; bp = 24 V_SETPALETTE_CYCLE
+			%else
+				dw		dummy_fn				; bp = 24 V_SETPALETTE_CYCLE
+			%endif
 				dw		dummy_fn				; bp = 26 V_RECT_DISPLAY
 				dw		dummy_fn				; bp = 28 V_SETMODE
 				dw		dummy_fn				; bp = 30 V_DISPLAYPAGE
@@ -105,6 +103,11 @@ cursor_new_y    dw      0
 
 cursor_lock     dw      0
 
+; Cursor type
+; 0 = unknown
+; 1 = early SCI
+; 2 = view type
+cursor_type		db		0
 
 ; Converts from 8 bit palette value to CGA pattern	
 convert_palette		times 256 dw 0				
@@ -927,12 +930,16 @@ set_palette:
 		shr		al, cl
 		or		ah, al
 		
+	%if USE_PALETTE_INTENSITY == 1
 		mov		al,	[ds:bp]		; Load intensity value (0-100 range)
 		add		bp, 2
 		mov		bx, intensity_mask
 		cs      xlatb			; Load intensity mask into AL
 		
 		and		al, ah			; Apply RGB value with intensity mask
+	%else
+		mov		al, ah
+	%endif
 				
 		xor		ah, ah			; Convert to look up index into array
 		shl		ax, 1
@@ -976,13 +983,17 @@ set_palette:
 		shr		al, cl
 		or		ah, al
 		
+	%if USE_PALETTE_INTENSITY == 1
 		mov		al,	[ds:bp]		; Load intensity value (0-100 range)
 		add		bp, 2
 		mov		bx, intensity_mask
 		cs      xlatb			; Load intensity mask into AL
 		
 		and		al, ah			; Apply RGB value with intensity mask
-				
+	%else
+		mov		al, ah
+	%endif
+	
 		xor		ah, ah			; Convert to look up index into array
 		shl		ax, 1
 
@@ -1000,6 +1011,7 @@ set_palette:
 		jnz		.palette_loop2
 ;;;;;;;;;;;;
 		
+	;%if USE_PALETTE_INTENSITY == 1
 		mov		byte [cs:need_fullscreen_refresh], 1
 		
 		; update the screen if we have the framebuffer segment stored
@@ -1012,6 +1024,7 @@ set_palette:
 		mov		cx, 200
 		mov		dx, 320
 		;call	update_rect
+	;%endif
 		
 .finish_palette_update:
 		pop		bp
@@ -1110,3 +1123,34 @@ load_cursor_dummy:
 		mov ax, cursor_storage
 ;		mov ax, cursor_and
 		ret
+
+show_cursor_wrapper:
+		cmp byte [cs:cursor_type], 0
+		jne .show_cursor_impl
+		; If show cursor called before load, then likely an early sci type
+		mov byte [cs:cursor_type], 1
+	.show_cursor_impl
+		cmp	byte [cs:cursor_type], 1
+		je	show_cursor
+		jmp	show_cursor_dummy
+
+hide_cursor_wrapper:
+		cmp	byte [cs:cursor_type], 1
+		je	hide_cursor
+		jmp	hide_cursor_dummy
+
+move_cursor_wrapper:
+		cmp	byte [cs:cursor_type], 1
+		je	move_cursor
+		jmp	move_cursor_dummy
+
+load_cursor_wrapper:
+		cmp byte [cs:cursor_type], 0
+		jne .load_cursor_impl
+		; If load cursor called before show, then likely a view type
+		mov byte [cs:cursor_type], 2
+		
+	.load_cursor_impl
+		cmp	byte [cs:cursor_type], 1
+		je	load_cursor
+		jmp	load_cursor_dummy
